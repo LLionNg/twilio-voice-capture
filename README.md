@@ -1,7 +1,8 @@
+## Create virtual environments
 `uv venv`
 
-# activate virtual environments
-# Windows
+## Activate virtual environments
+### Windows
 `.venv\Scripts\activate`
 #linux
 `source .venv/bin/activate`
