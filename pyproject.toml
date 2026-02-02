@@ -1,0 +1,27 @@
+[project]
+name = "voice-capture"
+version = "1.0.0"
+description = "Voice capture service with WebSocket streaming"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+    "pydantic-settings",
+    "python-dotenv",
+    "loguru",
+    "aiohttp",
+    "aiofiles",
+    "websockets",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

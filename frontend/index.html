@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Capture</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            margin-bottom: 25px;
+            border-radius: 8px;
+        }
+        .info-box p {
+            color: #0d47a1;
+            margin: 5px 0;
+        }
+        .form-group {
+            margin-bottom: 25px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 15px;
+        }
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            flex: 1;
+            background: #667eea;
+            color: white;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        button:hover:not(:disabled) {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .danger {
+            background: #e74c3c;
+        }
+        .danger:hover:not(:disabled) {
+            background: #c0392b;
+        }
+        #status {
+            margin-top: 25px;
+            padding: 15px;
+            border-radius: 8px;
+            font-weight: 500;
+            display: none;
+        }
+        #status.show { display: block; }
+        .success { background: #d4edda; color: #155724; border-left: 4px solid #28a745; }
+        .error { background: #f8d7da; color: #721c24; border-left: 4px solid #dc3545; }
+        .info { background: #d1ecf1; color: #0c5460; border-left: 4px solid #17a2b8; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Voice Capture</h1>
+        
+        <div class="info-box">
+            <p><strong>Audio Configuration</strong></p>
+            <p>Sample Rate: <strong>48000 Hz</strong></p>
+            <p>Channels: <strong>1 (Mono)</strong></p>
+        </div>
+        
+        <div class="form-group">
+            <label for="userName">Your Name:</label>
+            <input type="text" id="userName" placeholder="Enter your name">
+        </div>
+        
+        <div class="form-group">
+            <label for="roomName">Room Name:</label>
+            <input type="text" id="roomName" value="test-room" placeholder="Enter room name">
+        </div>
+        
+        <div class="button-group">
+            <button id="startBtn" onclick="startRecording()">Start Recording</button>
+            <button id="stopBtn" onclick="stopRecording()" disabled class="danger">Stop Recording</button>
+        </div>
+        
+        <div id="status"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let audioContext = null;
+        let processor = null;
+        let mediaStream = null;
+        let isRecording = false;
+
+        const SAMPLE_RATE = 48000;
+        const CHANNELS = 1;
+
+        function updateStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = type + ' show';
+        }
+
+        async function startRecording() {
+            const userName = document.getElementById('userName').value.trim();
+            const roomName = document.getElementById('roomName').value.trim();
+            
+            if (!userName || !roomName) {
+                updateStatus('Please enter your name and room name', 'error');
+                return;
+            }
+            
+            try {
+                updateStatus('Connecting...', 'info');
+                
+                const wsUrl = `ws://localhost:8082/ws/audio?language=th-TH&sr=${SAMPLE_RATE}&ch=${CHANNELS}`;
+                ws = new WebSocket(wsUrl);
+                ws.binaryType = 'arraybuffer';
+                
+                ws.onopen = async () => {
+                    console.log('WebSocket connected');
+                    updateStatus('Connected, starting audio capture...', 'info');
+                    
+                    try {
+                        await startAudioCapture();
+                        updateStatus(`Recording ${userName} in ${roomName}`, 'success');
+                        
+                        document.getElementById('startBtn').disabled = true;
+                        document.getElementById('stopBtn').disabled = false;
+                        document.getElementById('userName').disabled = true;
+                        document.getElementById('roomName').disabled = true;
+                        
+                        isRecording = true;
+                    } catch (error) {
+                        updateStatus(`Microphone error: ${error.message}`, 'error');
+                        ws.close();
+                    }
+                };
+                
+                ws.onmessage = (event) => {
+                    try {
+                        const message = JSON.parse(event.data);
+                        console.log('Received:', message.type);
+                        
+                        if (message.type === 'status' && message.data) {
+                            console.log('Status:', message.data.status, message.data.message);
+                        }
+                    } catch (e) {
+                        console.error('Message parse error:', e);
+                    }
+                };
+                
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    updateStatus('Connection error', 'error');
+                };
+                
+                ws.onclose = () => {
+                    console.log('WebSocket closed');
+                    if (isRecording) {
+                        stopAudioCapture();
+                    }
+                };
+                
+            } catch (error) {
+                console.error('Failed to start:', error);
+                updateStatus(`Failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function startAudioCapture() {
+            mediaStream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                    sampleRate: SAMPLE_RATE,
+                    channelCount: CHANNELS,
+                }
+            });
+            
+            const AC = window.AudioContext || window.webkitAudioContext;
+            audioContext = new AC({ sampleRate: SAMPLE_RATE });
+            
+            const source = audioContext.createMediaStreamSource(mediaStream);
+            processor = audioContext.createScriptProcessor(4096, CHANNELS, CHANNELS);
+            
+            processor.onaudioprocess = (e) => {
+                if (!ws || ws.readyState !== WebSocket.OPEN || !isRecording) {
+                    return;
+                }
+                
+                const inputData = e.inputBuffer.getChannelData(0);
+                const pcm16 = floatTo16BitPCM(inputData);
+                ws.send(pcm16.buffer);
+            };
+            
+            source.connect(processor);
+            processor.connect(audioContext.destination);
+            
+            console.log('Audio capture started');
+        }
+
+        function floatTo16BitPCM(input) {
+            const output = new Int16Array(input.length);
+            for (let i = 0; i < input.length; i++) {
+                const s = Math.max(-1, Math.min(1, input[i]));
+                output[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            return output;
+        }
+
+        function stopAudioCapture() {
+            if (processor) {
+                processor.disconnect();
+                processor.onaudioprocess = null;
+                processor = null;
+            }
+            
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+            
+            isRecording = false;
+            console.log('Audio capture stopped');
+        }
+
+        async function stopRecording() {
+            if (ws) {
+                updateStatus('Stopping...', 'info');
+                
+                try {
+                    ws.send(JSON.stringify({ type: 'stop' }));
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                } catch (e) {
+                    console.error('Stop signal error:', e);
+                }
+                
+                stopAudioCapture();
+                ws.close();
+                ws = null;
+                
+                updateStatus('Session ended. Recording saved.', 'success');
+                
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = true;
+                document.getElementById('userName').disabled = false;
+                document.getElementById('roomName').disabled = false;
+            }
+        }
+
+        const randomName = 'user' + Math.floor(Math.random() * 10000);
+        document.getElementById('userName').value = randomName;
+    </script>
+</body>
+</html>

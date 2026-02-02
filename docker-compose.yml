@@ -1,0 +1,21 @@
+services:
+  voice-capture:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8082
+      - SAMPLE_RATE=48000
+      - AUDIO_CHANNELS=1
+      - LANGUAGE=th-TH
+      - OUTPUT_DIR=/app/output
+      - TRANSCRIPTION_URL=${TRANSCRIPTION_URL}
+    volumes:
+      - ./output:/app/output
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
