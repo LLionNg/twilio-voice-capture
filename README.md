@@ -4,7 +4,7 @@
 ## Activate virtual environments
 ### Windows
 `.venv\Scripts\activate`
-#linux
+### linux
 `source .venv/bin/activate`
 
 Install deps
